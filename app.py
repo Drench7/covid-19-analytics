@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from datetime import datetime
 import warnings
+import os
 warnings.filterwarnings('ignore')
 
 # Set page configuration
@@ -38,17 +39,86 @@ st.markdown("""
 st.markdown('<h1 class="main-header">🌍 COVID-19 Analytics Dashboard</h1>', unsafe_allow_html=True)
 st.markdown("Comprehensive analysis of global COVID-19 data with interactive visualizations")
 
-# Load data with caching
+def create_sample_data():
+    """Create sample data as fallback"""
+    st.warning("🔄 Creating sample data for demonstration...")
+    
+    dates = pd.date_range('2023-01-01', '2023-12-31', freq='D')
+    countries = ['United States', 'India', 'Brazil', 'Russia', 'France', 
+                'Germany', 'UK', 'Japan', 'Italy', 'Spain',
+                'Mexico', 'South Africa', 'Canada', 'Australia', 'South Korea']
+    
+    data = []
+    np.random.seed(42)  # For consistent results
+    
+    for date in dates:
+        for country in countries:
+            # Create realistic-looking data with some trends
+            day_index = (date - pd.Timestamp('2023-01-01')).days
+            trend = 1 + (day_index / 365) * 0.5  # Gradual increase over year
+            
+            base_cases = np.random.randint(1000, 50000) * trend
+            confirmed = max(100, int(base_cases + np.random.randint(-1000, 1000)))
+            deaths = max(0, int(confirmed * np.random.uniform(0.01, 0.03)))
+            recovered = max(0, int(confirmed * np.random.uniform(0.6, 0.85)))
+            active = max(0, confirmed - deaths - recovered)
+            
+            data.append({
+                'date': date,
+                'country': country,
+                'confirmed': confirmed,
+                'deaths': deaths,
+                'recovered': recovered,
+                'active': active
+            })
+    
+    df = pd.DataFrame(data)
+    df['date'] = pd.to_datetime(df['date'])
+    st.info("📊 Sample data created successfully!")
+    return df
+
+# Load data with better error handling for cloud deployment
 @st.cache_data
 def load_data():
     try:
-        df = pd.read_csv("data/raw/covid_data.csv")
+        # Try multiple possible paths for cloud compatibility
+        possible_paths = [
+            "data/raw/covid_data.csv",
+            "./data/raw/covid_data.csv", 
+            "covid_data.csv",
+            "/mount/src/covid-19-analytics/data/raw/covid_data.csv"  # Streamlit cloud path
+        ]
+        
+        df = None
+        successful_path = None
+        
+        for path in possible_paths:
+            try:
+                if os.path.exists(path):
+                    df = pd.read_csv(path)
+                    successful_path = path
+                    st.success(f"✅ Data loaded successfully from: {path}")
+                    break
+                else:
+                    st.warning(f"⚠️ Path not found: {path}")
+            except Exception as e:
+                st.warning(f"⚠️ Could not load from {path}: {str(e)}")
+                continue
+        
+        if df is None or df.empty:
+            st.error("❌ Could not load data from any path. Creating sample data...")
+            # Create emergency sample data
+            return create_sample_data()
+        
+        # Process the data
         df['date'] = pd.to_datetime(df['date'])
         return df
+        
     except Exception as e:
-        st.error(f"Error loading data: {e}")
-        return pd.DataFrame()
+        st.error(f"❌ Critical error loading data: {str(e)}")
+        return create_sample_data()
 
+# Load the data
 df = load_data()
 
 # Show data info in sidebar
